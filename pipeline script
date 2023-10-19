@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+
+    environment {
+        PATH = "$PATH:/opt/apache-maven-3.9.5/bin"
+    }
+
+    stages {
+        stage('git url') {
+            steps {
+                git branch: 'main', url: 'https://github.com/viswanath2501/doc_project.git'
+            }
+        }
+        stage('mvn package') {
+            steps {
+                sh 'mvn clean install'
+            }
+        }
+        stage('SonarQubeAnalysis') {
+            steps {
+                withSonarQubeEnv('sonar'){
+                    sh 'mvn sonar:sonar'
+                }
+            }
+        }
+        stage('BuildDockerImage') {
+            steps {
+                sh 'docker build -t viswanath2501/sonar:latest .'
+            }
+        }
+        stage('Dockerlogin') {
+            steps {
+                withCredentials([string(credentialsId: 'Dpwd', variable: 'Dpwd')]) {
+                sh 'docker login -u viswanath2501 -p ${Dpwd}'
+                }
+            }
+        }
+        stage('DockerPush') {
+            steps {
+                sh 'docker push viswanath2501/sonar:latest'
+                }
+            }
+             stage('SSHConfigure & Create container') {
+            steps {
+                sshagent(['ssh']) {
+                        sh 'ssh -o StrictHostKeyChecking=no ubuntu@51.20.182.207 docker run -p 8009:80 --name doc-containner viswanath2501/sonar:latest'
+                    }
+                }
+            }
+        }
+      }
